@@ -2,5 +2,5 @@
 locals {
   environment = "dev"
   aws_region  = "us-east-1"
-  # Add other environment-specific variables here
+  aws_account_id = "496411573458"
 }
