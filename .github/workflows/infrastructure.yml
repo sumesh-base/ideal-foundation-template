@@ -14,6 +14,7 @@ on:
 permissions:
   id-token: write # This is required for requesting the JWT
   contents: read  # This is required for actions/checkout
+  pull-requests: write # Required for PR comments
 
 jobs:
   plan:
@@ -47,10 +48,62 @@ jobs:
     - name: Terragrunt Init
       run: terragrunt run-all init --terragrunt-non-interactive
       working-directory: ${{ env.WORKING_DIR }}
-
     - name: Terragrunt Plan
-      run: terragrunt run-all plan --terragrunt-non-interactive
+      id: plan
+      run: |
+        terragrunt run-all plan --terragrunt-non-interactive -no-color 2>&1 | tee /tmp/plan_output.txt
+        
+        echo "### Terragrunt Plan Summary" > /tmp/plan_table.md
+        echo "| Add | Change | Destroy |" >> /tmp/plan_table.md
+        echo "|-----|--------|---------|" >> /tmp/plan_table.md
+        
+        # Extract the plan summary line
+        SUMMARY=$(grep -E 'Plan: [0-9]+ to add, [0-9]+ to change, [0-9]+ to destroy.' /tmp/plan_output.txt | tail -n 1)
+        
+        if [ -n "$SUMMARY" ]; then
+          ADD=$(echo $SUMMARY | grep -oE '[0-9]+ to add' | awk '{print $1}')
+          CHANGE=$(echo $SUMMARY | grep -oE '[0-9]+ to change' | awk '{print $1}')
+          DESTROY=$(echo $SUMMARY | grep -oE '[0-9]+ to destroy' | awk '{print $1}')
+          echo "| $ADD | $CHANGE | $DESTROY |" >> /tmp/plan_table.md
+        else
+          echo "| 0 | 0 | 0 |" >> /tmp/plan_table.md
+        fi
       working-directory: ${{ env.WORKING_DIR }}
+
+    - name: Comment PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const table = fs.readFileSync('/tmp/plan_table.md', 'utf8');
+          let plan = fs.readFileSync('/tmp/plan_output.txt', 'utf8');
+          // Truncate if too long for GitHub comment
+          if (plan.length > 60000) {
+            plan = plan.substring(0, 60000) + "
+... (truncated)";
+          }
+          const output = `#### Terragrunt Plan 📖
+          
+          ${table}
+          
+          <details><summary>Show Full Plan Output</summary>
+          
+          \`\`\`terraform
+          ${plan}
+          \`\`\`
+          
+          </details>
+          
+          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
 
   apply:
     name: 'Terragrunt Apply'
