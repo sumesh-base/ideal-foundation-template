@@ -12,11 +12,8 @@ permissions:
 
 jobs:
   release-please:
-    runs-on:
-  workflow_dispatch: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
         with:
           release-type: terraform-module
-          # In a live infra repo, a simple node/terraform versioning is fine.
-          # We just want a centralized changelog and release tags.
