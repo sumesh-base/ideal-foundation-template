@@ -21,3 +21,4 @@ inputs = {
   subnet_ids             = dependency.vpc.outputs.database_subnets
   vpc_security_group_ids = [dependency.vpc.outputs.default_security_group_id]
 }
+# Trigger targeted run for RDS only!
