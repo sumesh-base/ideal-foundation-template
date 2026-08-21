@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: us-east-1
-      TERRAGRUNT_WORKING_DIR: infrastructure
+      WORKING_DIR: infrastructure
 
     steps:
     - name: Checkout
@@ -46,11 +46,11 @@ jobs:
 
     - name: Terragrunt Init
       run: terragrunt run-all init --terragrunt-non-interactive
-      working-directory: ${{ env.TERRAGRUNT_WORKING_DIR }}
+      working-directory: ${{ env.WORKING_DIR }}
 
     - name: Terragrunt Plan
       run: terragrunt run-all plan --terragrunt-non-interactive
-      working-directory: ${{ env.TERRAGRUNT_WORKING_DIR }}
+      working-directory: ${{ env.WORKING_DIR }}
 
   apply:
     name: 'Terragrunt Apply'
@@ -60,7 +60,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     env:
       AWS_REGION: us-east-1
-      TERRAGRUNT_WORKING_DIR: infrastructure
+      WORKING_DIR: infrastructure
     
     steps:
     - name: Checkout
@@ -85,8 +85,8 @@ jobs:
 
     - name: Terragrunt Init
       run: terragrunt run-all init --terragrunt-non-interactive
-      working-directory: ${{ env.TERRAGRUNT_WORKING_DIR }}
+      working-directory: ${{ env.WORKING_DIR }}
 
     - name: Terragrunt Apply
       run: terragrunt run-all apply --terragrunt-non-interactive
-      working-directory: ${{ env.TERRAGRUNT_WORKING_DIR }}
+      working-directory: ${{ env.WORKING_DIR }}
