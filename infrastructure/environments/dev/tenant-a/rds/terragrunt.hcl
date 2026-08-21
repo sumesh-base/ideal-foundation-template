@@ -9,6 +9,12 @@ include "envcommon" {
 
 dependency "vpc" {
   config_path = "../vpc"
+  
+  mock_outputs = {
+    database_subnets          = ["subnet-mock1", "subnet-mock2"]
+    default_security_group_id = "sg-mock"
+  }
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
 }
 
 inputs = {
