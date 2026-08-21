@@ -4,12 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ "main" ]
-    paths:
-      - 'infrastructure/**'
   pull_request:
     branches: [ "main" ]
-    paths:
-      - 'infrastructure/**'
   release:
     types: [published]
 
