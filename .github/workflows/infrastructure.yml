@@ -142,19 +142,34 @@ jobs:
       run: |
         terragrunt run-all plan --terragrunt-non-interactive $target_flags -no-color 2>&1 | tee /tmp/plan_output.txt
         
-        echo "### ${{ matrix.environment }} - Plan Summary" > /tmp/plan_table.md
-        echo "| Add | Change | Destroy |" >> /tmp/plan_table.md
-        echo "|-----|--------|---------|" >> /tmp/plan_table.md
-        
-        SUMMARY=$(grep -E 'Plan: [0-9]+ to add, [0-9]+ to change, [0-9]+ to destroy.' /tmp/plan_output.txt | tail -n 1)
-        if [ -n "$SUMMARY" ]; then
-          ADD=$(echo $SUMMARY | grep -oE '[0-9]+ to add' | awk '{print $1}')
-          CHANGE=$(echo $SUMMARY | grep -oE '[0-9]+ to change' | awk '{print $1}')
-          DESTROY=$(echo $SUMMARY | grep -oE '[0-9]+ to destroy' | awk '{print $1}')
-          echo "| $ADD | $CHANGE | $DESTROY |" >> /tmp/plan_table.md
-        else
-          echo "| 0 | 0 | 0 |" >> /tmp/plan_table.md
-        fi
+        cat << 'PYEOF' > /tmp/parse_plan.py
+import re
+with open('/tmp/plan_output.txt', 'r') as f:
+    log = f.read()
+modules = {}
+current_module = "unknown"
+for line in log.splitlines():
+    m_prefix = re.search(r'prefix=\[.*?/environments/[^/]+/(.+?)\]', line)
+    if m_prefix:
+        current_module = m_prefix.group(1)
+    m_plan = re.search(r'Plan: (\d+) to add, (\d+) to change, (\d+) to destroy', line)
+    if m_plan:
+        add, change, destroy = m_plan.groups()
+        if current_module not in modules:
+            modules[current_module] = {'add': 0, 'change': 0, 'destroy': 0}
+        modules[current_module]['add'] += int(add)
+        modules[current_module]['change'] += int(change)
+        modules[current_module]['destroy'] += int(destroy)
+
+print("### ${{ matrix.environment }} - Plan Summary")
+print("| Module | Add | Change | Destroy |")
+print("|--------|-----|--------|---------|")
+for mod, counts in modules.items():
+    print(f"| `{mod}` | {counts['add']} | {counts['change']} | {counts['destroy']} |")
+if not modules:
+    print("| No changes | 0 | 0 | 0 |")
+PYEOF
+        python3 /tmp/parse_plan.py > /tmp/plan_table.md
       working-directory: ${{ env.WORKING_DIR }}
 
     - name: Comment PR
