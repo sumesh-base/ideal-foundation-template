@@ -125,6 +125,8 @@ jobs:
     needs: [discover, plan]
     runs-on: ubuntu-latest
     # Enterprise standard: Only deploy automatically on tags/releases, OR on push to main with environments.
+    # Run apply on pushes to main, releases, or manual dispatches.
+    # We will dynamically skip production inside the steps if it's not a release.
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'release' || github.event_name == 'workflow_dispatch')
     strategy:
       fail-fast: false
@@ -162,6 +164,17 @@ jobs:
       run: terragrunt run-all init --terragrunt-non-interactive
       working-directory: ${{ env.WORKING_DIR }}
 
+    - name: Check Release Gates
+      id: gate
+      run: |
+        if [[ "${{ matrix.environment }}" == "production" && "${{ github.event_name }}" == "push" ]]; then
+          echo "Production deployments are locked to GitHub Releases. Skipping automated apply on standard merge."
+          echo "skip=true" >> $GITHUB_ENV
+        else
+          echo "skip=false" >> $GITHUB_ENV
+        fi
+        
     - name: Terragrunt Apply
+      if: env.skip == 'false'
       run: terragrunt run-all apply --terragrunt-non-interactive
       working-directory: ${{ env.WORKING_DIR }}
