@@ -21,3 +21,4 @@ inputs = {
   subnet_ids             = dependency.vpc.outputs.database_subnets
   vpc_security_group_ids = [dependency.vpc.outputs.default_security_group_id]
 }
+# Applying Hotfix to fix production deployment!
