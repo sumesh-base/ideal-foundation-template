@@ -143,83 +143,57 @@ jobs:
         terragrunt run-all plan --terragrunt-non-interactive $target_flags -no-color 2>&1 | tee /tmp/plan_output.txt
         
         cat << 'PYEOF' > /tmp/parse_plan.py
-import re
-with open('/tmp/plan_output.txt', 'r') as f:
-    log = f.read()
-modules = {}
-current_module = "unknown"
-for line in log.splitlines():
-    m_prefix = re.search(r'prefix=\[.*?/environments/[^/]+/(.+?)\]', line)
-    if m_prefix:
-        current_module = m_prefix.group(1)
-        if current_module not in modules:
-            modules[current_module] = {'add': [], 'change': [], 'destroy': [], 'replace': [], 'counts': {'add': 0, 'change': 0, 'destroy': 0}}
-            
-    m_res = re.search(r'^\s+# (.*) (will be created|will be updated in-place|will be destroyed|must be replaced)', line)
-    if m_res and current_module != "unknown":
-        res_name = m_res.group(1)
-        action = m_res.group(2)
-        if action == "will be created":
-            modules[current_module]['add'].append(res_name)
-        elif action == "will be updated in-place":
-            modules[current_module]['change'].append(res_name)
-        elif action == "will be destroyed":
-            modules[current_module]['destroy'].append(res_name)
-        elif action == "must be replaced":
-            modules[current_module]['replace'].append(res_name)
-            
-    m_plan = re.search(r'Plan: (\d+) to add, (\d+) to change, (\d+) to destroy', line)
-    if m_plan and current_module != "unknown":
-        add, change, destroy = m_plan.groups()
-        modules[current_module]['counts']['add'] = int(add)
-        modules[current_module]['counts']['change'] = int(change)
-        modules[current_module]['counts']['destroy'] = int(destroy)
-
-print("### ${{ matrix.environment }} - Detailed Plan Summary")
-if not modules:
-    print("No infrastructure changes detected.")
-for mod, data in modules.items():
-    print(f"#### 📦 Module: `{mod}`")
-    print(f"**Summary:** {data['counts']['add']} to add, {data['counts']['change']} to change, {data['counts']['destroy']} to destroy.\n")
-    if data['add'] or data['change'] or data['destroy'] or data['replace']:
-        print("| Action | Resource |")
-        print("|--------|----------|")
-        for res in data['add']:
-            print(f"| 🟢 Add | `{res}` |")
-        for res in data['change']:
-            print(f"| 🟡 Change | `{res}` |")
-        for res in data['replace']:
-            print(f"| 🟠 Replace | `{res}` |")
-        for res in data['destroy']:
-            print(f"| 🔴 Destroy | `{res}` |")
-    print("\n---")
-PYEOF' > /tmp/parse_plan.py
-import re
-with open('/tmp/plan_output.txt', 'r') as f:
-    log = f.read()
-modules = {}
-current_module = "unknown"
-for line in log.splitlines():
-    m_prefix = re.search(r'prefix=\[.*?/environments/[^/]+/(.+?)\]', line)
-    if m_prefix:
-        current_module = m_prefix.group(1)
-    m_plan = re.search(r'Plan: (\d+) to add, (\d+) to change, (\d+) to destroy', line)
-    if m_plan:
-        add, change, destroy = m_plan.groups()
-        if current_module not in modules:
-            modules[current_module] = {'add': 0, 'change': 0, 'destroy': 0}
-        modules[current_module]['add'] += int(add)
-        modules[current_module]['change'] += int(change)
-        modules[current_module]['destroy'] += int(destroy)
-
-print("### ${{ matrix.environment }} - Plan Summary")
-print("| Module | Add | Change | Destroy |")
-print("|--------|-----|--------|---------|")
-for mod, counts in modules.items():
-    print(f"| `{mod}` | {counts['add']} | {counts['change']} | {counts['destroy']} |")
-if not modules:
-    print("| No changes | 0 | 0 | 0 |")
-PYEOF
+        import re
+        with open('/tmp/plan_output.txt', 'r') as f:
+            log = f.read()
+        modules = {}
+        current_module = "unknown"
+        for line in log.splitlines():
+            m_prefix = re.search(r'prefix=\[.*?/environments/[^/]+/(.+?)\]', line)
+            if m_prefix:
+                current_module = m_prefix.group(1)
+                if current_module not in modules:
+                    modules[current_module] = {'add': [], 'change': [], 'destroy': [], 'replace': [], 'counts': {'add': 0, 'change': 0, 'destroy': 0}}
+                    
+            m_res = re.search(r'^\s+# (.*) (will be created|will be updated in-place|will be destroyed|must be replaced)', line)
+            if m_res and current_module != "unknown":
+                res_name = m_res.group(1)
+                action = m_res.group(2)
+                if action == "will be created":
+                    modules[current_module]['add'].append(res_name)
+                elif action == "will be updated in-place":
+                    modules[current_module]['change'].append(res_name)
+                elif action == "will be destroyed":
+                    modules[current_module]['destroy'].append(res_name)
+                elif action == "must be replaced":
+                    modules[current_module]['replace'].append(res_name)
+                    
+            m_plan = re.search(r'Plan: (\d+) to add, (\d+) to change, (\d+) to destroy', line)
+            if m_plan and current_module != "unknown":
+                add, change, destroy = m_plan.groups()
+                modules[current_module]['counts']['add'] = int(add)
+                modules[current_module]['counts']['change'] = int(change)
+                modules[current_module]['counts']['destroy'] = int(destroy)
+        
+        print("### ${{ matrix.environment }} - Detailed Plan Summary")
+        if not modules:
+            print("No infrastructure changes detected.")
+        for mod, data in modules.items():
+            print(f"#### 📦 Module: `{mod}`")
+            print(f"**Summary:** {data['counts']['add']} to add, {data['counts']['change']} to change, {data['counts']['destroy']} to destroy.\n")
+            if data['add'] or data['change'] or data['destroy'] or data['replace']:
+                print("| Action | Resource |")
+                print("|--------|----------|")
+                for res in data['add']:
+                    print(f"| 🟢 Add | `{res}` |")
+                for res in data['change']:
+                    print(f"| 🟡 Change | `{res}` |")
+                for res in data['replace']:
+                    print(f"| 🟠 Replace | `{res}` |")
+                for res in data['destroy']:
+                    print(f"| 🔴 Destroy | `{res}` |")
+            print("\n---")
+        PYEOF
         python3 /tmp/parse_plan.py > /tmp/plan_table.md
       working-directory: ${{ env.WORKING_DIR }}
 
