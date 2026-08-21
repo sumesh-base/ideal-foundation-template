@@ -10,20 +10,45 @@ on:
     branches: [ "main" ]
     paths:
       - 'infrastructure/**'
+  release:
+    types: [published]
 
 permissions:
-  id-token: write # This is required for requesting the JWT
-  contents: read  # This is required for actions/checkout
+  id-token: write
+  contents: read
   pull-requests: write
 
 jobs:
-  plan:
-    name: 'Terragrunt Plan'
+  # 1. Discover Environments dynamically
+  discover:
+    name: 'Discover Environments'
     runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-envs.outputs.environments }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Find Environments
+        id: set-envs
+        run: |
+          # Find all top-level directories in environments/ that do not start with '_'
+          cd infrastructure/environments
+          ENVS=$(find . -mindepth 1 -maxdepth 1 -type d ! -name "_*" -exec basename {} \; | jq -R -s -c 'split("\n")[:-1]')
+          echo "environments=$ENVS" >> $GITHUB_OUTPUT
+
+  # 2. Plan across all discovered environments
+  plan:
+    name: 'Plan: ${{ matrix.environment }}'
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.discover.outputs.environments) }}
     env:
       AWS_REGION: us-east-1
-      WORKING_DIR: infrastructure/environments
-
+      WORKING_DIR: infrastructure/environments/${{ matrix.environment }}
+    
     steps:
     - name: Checkout
       uses: actions/checkout@v7
@@ -31,6 +56,9 @@ jobs:
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v6
       with:
+        # In an enterprise, map matrix.environment to a specific AWS account role using GitHub Secrets or vars.
+        # e.g., role-to-assume: ${{ vars[format('AWS_ROLE_ARN_{0}', env.ENV_UPPER)] }}
+        # For now, we fallback to the default role if env-specific doesn't exist (using the one we already have).
         role-to-assume: arn:aws:iam::496411573458:role/sumesh-github-actions-aws-role
         aws-region: ${{ env.AWS_REGION }}
 
@@ -39,6 +67,7 @@ jobs:
       with:
         terraform_version: 1.9.0
         terraform_wrapper: false
+        
     - name: Setup Terragrunt
       run: |
         curl -sLo /tmp/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v0.66.0/terragrunt_linux_amd64
@@ -48,18 +77,17 @@ jobs:
     - name: Terragrunt Init
       run: terragrunt run-all init --terragrunt-non-interactive
       working-directory: ${{ env.WORKING_DIR }}
+      
     - name: Terragrunt Plan
       id: plan
       run: |
         terragrunt run-all plan --terragrunt-non-interactive -no-color 2>&1 | tee /tmp/plan_output.txt
         
-        echo "### Terragrunt Plan Summary" > /tmp/plan_table.md
+        echo "### ${{ matrix.environment }} - Plan Summary" > /tmp/plan_table.md
         echo "| Add | Change | Destroy |" >> /tmp/plan_table.md
         echo "|-----|--------|---------|" >> /tmp/plan_table.md
         
-        # Extract the plan summary line
         SUMMARY=$(grep -E 'Plan: [0-9]+ to add, [0-9]+ to change, [0-9]+ to destroy.' /tmp/plan_output.txt | tail -n 1)
-        
         if [ -n "$SUMMARY" ]; then
           ADD=$(echo $SUMMARY | grep -oE '[0-9]+ to add' | awk '{print $1}')
           CHANGE=$(echo $SUMMARY | grep -oE '[0-9]+ to change' | awk '{print $1}')
@@ -79,23 +107,10 @@ jobs:
           const fs = require('fs');
           const table = fs.readFileSync('/tmp/plan_table.md', 'utf8');
           let plan = fs.readFileSync('/tmp/plan_output.txt', 'utf8');
-          // Truncate if too long for GitHub comment
           if (plan.length > 60000) {
             plan = plan.substring(0, 60000) + "\n... (truncated)";
           }
-          const output = `#### Terragrunt Plan 📖
-          
-          ${table}
-          
-          <details><summary>Show Full Plan Output</summary>
-          
-          \`\`\`terraform
-          ${plan}
-          \`\`\`
-          
-          </details>
-          
-          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+          const output = `#### Terragrunt Plan: \`${{ matrix.environment }}\` 📖\n\n${table}\n\n<details><summary>Show Full Plan Output</summary>\n\n\`\`\`terraform\n${plan}\n\`\`\`\n\n</details>`;
           
           github.rest.issues.createComment({
             issue_number: context.issue.number,
@@ -104,15 +119,22 @@ jobs:
             body: output
           })
 
+  # 3. Apply changes
   apply:
-    name: 'Terragrunt Apply'
+    name: 'Apply: ${{ matrix.environment }}'
+    needs: [discover, plan]
     runs-on: ubuntu-latest
-    needs: plan
-    environment: production
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Enterprise standard: Only deploy automatically on tags/releases, OR on push to main with environments.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'release' || github.event_name == 'workflow_dispatch')
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.discover.outputs.environments) }}
+    # Binds to the GitHub Environment protection rules (e.g. requires approval for prod)
+    environment: ${{ matrix.environment }}
     env:
       AWS_REGION: us-east-1
-      WORKING_DIR: infrastructure/environments
+      WORKING_DIR: infrastructure/environments/${{ matrix.environment }}
     
     steps:
     - name: Checkout
@@ -129,6 +151,7 @@ jobs:
       with:
         terraform_version: 1.9.0
         terraform_wrapper: false
+        
     - name: Setup Terragrunt
       run: |
         curl -sLo /tmp/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v0.66.0/terragrunt_linux_amd64
