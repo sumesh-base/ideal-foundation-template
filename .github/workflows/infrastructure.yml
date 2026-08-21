@@ -332,16 +332,6 @@ jobs:
       run: terragrunt run-all init --terragrunt-non-interactive $target_flags
       working-directory: ${{ env.WORKING_DIR }}
 
-    - name: Check Release Gates
-      id: gate
-      run: |
-        if [[ "${{ matrix.environment }}" == "production" && "${{ github.event_name }}" == "push" ]]; then
-          echo "Production deployments are locked to GitHub Releases. Skipping automated apply on standard merge."
-          echo "skip=true" >> $GITHUB_ENV
-        else
-          echo "skip=false" >> $GITHUB_ENV
-        fi
-        
     - name: Terragrunt Apply
       if: env.skip == 'false'
       run: terragrunt run-all apply --terragrunt-non-interactive $target_flags
