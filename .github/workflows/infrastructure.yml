@@ -14,8 +14,7 @@ on:
 permissions:
   id-token: write # This is required for requesting the JWT
   contents: read  # This is required for actions/checkout
-  pull-requests: write # Required for PR comments
-  pull-requests: write # Required for PR comments
+  pull-requests: write
 
 jobs:
   plan:
@@ -82,8 +81,7 @@ jobs:
           let plan = fs.readFileSync('/tmp/plan_output.txt', 'utf8');
           // Truncate if too long for GitHub comment
           if (plan.length > 60000) {
-            plan = plan.substring(0, 60000) + "
-... (truncated)";
+            plan = plan.substring(0, 60000) + "\n... (truncated)";
           }
           const output = `#### Terragrunt Plan 📖
           
