@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: us-east-1
-      WORKING_DIR: infrastructure
+      WORKING_DIR: infrastructure/environments
 
     steps:
     - name: Checkout
@@ -60,7 +60,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     env:
       AWS_REGION: us-east-1
-      WORKING_DIR: infrastructure
+      WORKING_DIR: infrastructure/environments
     
     steps:
     - name: Checkout
