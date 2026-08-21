@@ -21,6 +21,7 @@ generate "provider" {
   contents  = <<EOF
 provider "aws" {
   region = "${local.aws_region}"
+  allowed_account_ids = ["${local.env_vars.locals.aws_account_id}"]
 
   # Default tags to apply to all resources
   default_tags {
