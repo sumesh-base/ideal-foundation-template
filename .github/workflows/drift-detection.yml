@@ -1,0 +1,98 @@
+name: 'Drift Detection'
+
+on:
+  schedule:
+    # Run every night at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  issues: write
+  contents: read
+
+jobs:
+  discover:
+    name: 'Discover Environments'
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-envs.outputs.environments }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Find Environments
+        id: set-envs
+        run: |
+          cd infrastructure/environments
+          ENVS=$(find . -mindepth 1 -maxdepth 1 -type d ! -name "_*" -exec basename {} \; | jq -R -s -c 'split("\n")[:-1]')
+          echo "environments=$ENVS" >> $GITHUB_OUTPUT
+
+  drift-check:
+    name: 'Drift Check: ${{ matrix.environment }}'
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.discover.outputs.environments) }}
+    env:
+      AWS_REGION: us-east-1
+      WORKING_DIR: infrastructure/environments/${{ matrix.environment }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: ${{ vars[format('AWS_ROLE_ARN_{0}', matrix.environment)] }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_version: 1.9.0
+        terraform_wrapper: false
+        
+    - name: Setup Terragrunt
+      run: |
+        curl -sLo /tmp/terragrunt https://github.com/gruntwork-io/terragrunt/releases/download/v0.66.0/terragrunt_linux_amd64
+        chmod +x /tmp/terragrunt
+        sudo mv /tmp/terragrunt /usr/local/bin/terragrunt
+
+    - name: Terragrunt Init
+      run: terragrunt run-all init --terragrunt-non-interactive
+      working-directory: ${{ env.WORKING_DIR }}
+      
+    - name: Terragrunt Plan (Check for Drift)
+      id: plan
+      # Use -detailed-exitcode. 0 = empty plan, 2 = changes present (drift)
+      run: |
+        terragrunt run-all plan --terragrunt-non-interactive -detailed-exitcode -no-color > /tmp/plan.txt 2>&1 || exitcode=$?
+        echo "exitcode=${exitcode:-0}" >> $GITHUB_ENV
+      working-directory: ${{ env.WORKING_DIR }}
+
+    - name: Report Drift
+      if: env.exitcode == '2'
+      uses: actions/github-script@v9
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const env = '${{ matrix.environment }}';
+          const title = `🚨 Infrastructure Drift Detected in \`${env}\``;
+          const body = `### Drift Detected!
+          The nightly drift detection workflow found changes between the repository code and the live infrastructure in **${env}**.
+          
+          This usually means someone modified resources manually in the AWS Console.
+          
+          [View the Action Logs Here](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+          `;
+          
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['drift', 'bug']
+          })
