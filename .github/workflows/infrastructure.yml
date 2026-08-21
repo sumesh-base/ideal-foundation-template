@@ -218,6 +218,21 @@ jobs:
             body: output
           })
 
+
+  # Aggregator job for Branch Protection rules
+  plan-success:
+    name: 'Terragrunt Plan'
+    needs: [plan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check Plan Matrix Status
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]; then
+            echo "One or more matrix plan jobs failed."
+            exit 1
+          fi
+
   # 3. Apply changes
   apply:
     name: 'Apply: ${{ matrix.environment }}'
