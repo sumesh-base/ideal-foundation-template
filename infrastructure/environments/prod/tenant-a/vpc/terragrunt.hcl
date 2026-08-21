@@ -10,7 +10,7 @@ include "envcommon" {
 inputs = {
   cidr = include.envcommon.locals.tenant_vars.locals.vpc_cidr
   
-  private_subnets  = ["10.10.1.0/24", "10.10.2.0/24", "10.10.3.0/24"]
-  public_subnets   = ["10.10.101.0/24", "10.10.102.0/24", "10.10.103.0/24"]
-  database_subnets = ["10.10.21.0/24", "10.10.22.0/24", "10.10.23.0/24"]
+  private_subnets  = ["10.20.1.0/24", "10.20.2.0/24", "10.20.3.0/24"]
+  public_subnets   = ["10.20.101.0/24", "10.20.102.0/24", "10.20.103.0/24"]
+  database_subnets = ["10.20.21.0/24", "10.20.22.0/24", "10.20.23.0/24"]
 }
